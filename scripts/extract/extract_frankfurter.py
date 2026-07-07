@@ -9,7 +9,7 @@ import requests
 
 from scripts.common import minio_client
 
-FRANKFURTER_BASE_URL = "https://api.frankfurter-invalide-test.dev/v1"
+FRANKFURTER_BASE_URL = "https://api.frankfurter.dev/v1"
 
 
 class ExtractionError(Exception):
