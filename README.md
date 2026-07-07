@@ -12,6 +12,8 @@ de change (hedging) ?
 
 **Destinataire** : le/la trésorier(ère) de l'entreprise.
 
+Voir [`livrables/note_de_cadrage.md`](livrables/note_de_cadrage.md) pour la version détaillée.
+
 ## Démarrage
 
 ```bash
@@ -28,34 +30,57 @@ dans l'UI Airflow ("Trigger DAG").
 
 ## Démonstration des 3 chemins
 
-### 1. Chemin nominal
-Déclencher le DAG sur une date récente (jour ouvré). Toutes les tâches
-passent au vert, les 3 devises sont chargées en gold.
-```bash
-# via l'UI : Trigger DAG w/ Config -> {"execution_date": "<date récente>"}
-```
-Vérifier : `SELECT * FROM fact_taux_change ORDER BY load_ts DESC LIMIT 3;`
-dans `postgres_gold`.
+Captures disponibles dans [`livrables/captures/`](livrables/captures/).
 
-### 2. Chemin d'échec qualité (DAG vert, donnée en quarantaine)
-Pour démontrer ce chemin sans dépendre du hasard des données réelles,
-modifier temporairement `SEUIL_FRAICHEUR_JOURS` dans
-`scripts/quality/rules.py` à `0`, ou déclencher le DAG sur une
-`execution_date` correspondant à un jour suivant un week-end/férié long
-(l'écart de fraîcheur dépassera alors le seuil). Le DAG reste vert ; la
-tâche `quality_and_clean` écrit dans le bucket `silver-quarantine` et logge
-la raison dans `log_qualite` (statut `quarantaine`).
+### 1. Chemin nominal (`01_chemin_nominal.png`)
+Toutes les tâches passent au vert, les 3 devises sont chargées en gold.
 
-### 3. Chemin d'échec technique (DAG rouge)
-Couper temporairement l'accès réseau au conteneur (ou pointer
-`FRANKFURTER_BASE_URL` vers une URL invalide) avant de déclencher le DAG.
-Après épuisement des 3 `retries`, la tâche `extract` échoue et le DAG passe
-au rouge. Vérifier `log_technique` (statut `echec`).
+### 2. Chemin d'échec qualité (`02_chemin_echec_qualite.png`)
+Le DAG reste vert, mais une règle qualité (fraîcheur) rejette les
+enregistrements, qui partent en quarantaine (bucket `silver-quarantine`,
+table `log_qualite` avec statut `quarantaine`). Reproductible en abaissant
+temporairement `SEUIL_FRAICHEUR_JOURS` dans `scripts/quality/rules.py`.
+
+### 3. Chemin d'échec technique (`03_chemin_echec_technique.png`)
+La tâche `extract` échoue après épuisement des 3 `retries` (DAG rouge).
+Reproductible en pointant temporairement `FRANKFURTER_BASE_URL` (dans
+`scripts/extract/extract_frankfurter.py`) vers une URL invalide.
 
 ## Vérification de l'idempotence
-Voir `sql/03_verification_idempotence.sql`. Rejouer plusieurs fois le DAG
-sur la même `execution_date` puis exécuter ces requêtes contre
-`postgres_gold` : aucune duplication ne doit apparaître.
+
+Voir `sql/03_verification_idempotence.sql` et
+`livrables/captures/04_verification_idempotence.png`. Rejouer plusieurs fois
+le DAG sur la même date puis exécuter ces requêtes contre `postgres_gold` :
+aucune duplication n'apparaît (contrainte `UNIQUE(id_date, id_devise)` +
+`UPSERT`).
+
+## Chargement de l'historique (backfill)
+
+⚠️ Le mode `airflow dags backfill` s'est révélé instable avec les tâches
+mappées dynamiquement (`.expand()`) de ce DAG : plusieurs jours exécutés en
+parallèle provoquent des `deadlock` et des valeurs manquantes en amont.
+
+Méthode fiable utilisée à la place : déclenchements séquentiels indépendants,
+un jour à la fois, avec pause entre chaque run :
+
+```bash
+for i in $(seq 1 15); do
+  D=$(python3 -c "from datetime import date, timedelta; print(date.today() - timedelta(days=$i))")
+  docker exec tp-lakehouse-airflow-scheduler-1 airflow dags trigger taux_change_frankfurter -e "$D"
+  sleep 75
+done
+```
+
+## Dashboard Metabase (`livrables/captures/05_dashboard_metabase.png`)
+
+Connecté à `postgres_gold`. Trois visualisations, chacune reliée à la
+question métier :
+- **Évolution des taux EUR vers USD/GBP/CHF** — graphique en ligne, répond à
+  "quelle tendance sur la période".
+- **Variation quotidienne par devise (dernier jour)** — graphique en barres,
+  répond à "quel écart entre devises".
+- **Devise la plus volatile aujourd'hui** — indicateur agrégé (KPI), répond à
+  "quel seuil est franchi, sur quelle devise agir en priorité".
 
 ## Structure du projet
 ```
@@ -68,6 +93,9 @@ scripts/
   load/               silver -> gold (idempotent)
 sql/                  DDL gold + logs + requêtes d'idempotence
 docker/               Dockerfile Airflow
+livrables/
+  note_de_cadrage.md  note de cadrage métier (partie 1)
+  captures/           captures d'écran des 3 chemins + idempotence + dashboard
 docker-compose.yml
 NAMING_CONVENTIONS.md
 ```
