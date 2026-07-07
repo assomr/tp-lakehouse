@@ -1,0 +1,18 @@
+[2026-07-07T10:35:13.160+0000] {local_task_job_runner.py:120} INFO - ::group::Pre task execution logs
+[2026-07-07T10:35:13.179+0000] {taskinstance.py:2076} INFO - Dependencies all met for dep_context=non-requeueable deps ti=<TaskInstance: taux_change_frankfurter.log_summary manual__2026-07-07T10:35:10.051783+00:00 [queued]>
+[2026-07-07T10:35:13.182+0000] {taskinstance.py:2076} INFO - Dependencies all met for dep_context=requeueable deps ti=<TaskInstance: taux_change_frankfurter.log_summary manual__2026-07-07T10:35:10.051783+00:00 [queued]>
+[2026-07-07T10:35:13.182+0000] {taskinstance.py:2306} INFO - Starting attempt 1 of 4
+[2026-07-07T10:35:13.187+0000] {taskinstance.py:2330} INFO - Executing <Task(_PythonDecoratedOperator): log_summary> on 2026-07-07 10:35:10.051783+00:00
+[2026-07-07T10:35:13.190+0000] {standard_task_runner.py:64} INFO - Started process 846 to run task
+[2026-07-07T10:35:13.191+0000] {standard_task_runner.py:90} INFO - Running: ['***', 'tasks', 'run', 'taux_change_frankfurter', 'log_summary', 'manual__2026-07-07T10:35:10.051783+00:00', '--job-id', '172', '--raw', '--subdir', 'DAGS_FOLDER/dag_taux_change.py', '--cfg-path', '/tmp/tmpfq89a0p0']
+[2026-07-07T10:35:13.192+0000] {standard_task_runner.py:91} INFO - Job 172: Subtask log_summary
+[2026-07-07T10:35:13.217+0000] {task_command.py:426} INFO - Running <TaskInstance: taux_change_frankfurter.log_summary manual__2026-07-07T10:35:10.051783+00:00 [running]> on host 1b4c2f832a13
+[2026-07-07T10:35:13.358+0000] {taskinstance.py:2648} INFO - Exporting env vars: AIRFLOW_CTX_DAG_OWNER='assia' AIRFLOW_CTX_DAG_ID='taux_change_frankfurter' AIRFLOW_CTX_TASK_ID='log_summary' AIRFLOW_CTX_EXECUTION_DATE='2026-07-07T10:35:10.051783+00:00' AIRFLOW_CTX_TRY_NUMBER='1' AIRFLOW_CTX_DAG_RUN_ID='manual__2026-07-07T10:35:10.051783+00:00'
+[2026-07-07T10:35:13.359+0000] {taskinstance.py:430} INFO - ::endgroup::
+[2026-07-07T10:35:13.364+0000] {logging_mixin.py:188} INFO - [résumé] validées=['USD', 'GBP', 'CHF'] quarantaine=[]
+[2026-07-07T10:35:13.364+0000] {python.py:237} INFO - Done. Returned value was: None
+[2026-07-07T10:35:13.364+0000] {taskinstance.py:441} INFO - ::group::Post task execution logs
+[2026-07-07T10:35:13.369+0000] {taskinstance.py:1206} INFO - Marking task as SUCCESS. dag_id=taux_change_frankfurter, task_id=log_summary, run_id=manual__2026-07-07T10:35:10.051783+00:00, execution_date=20260707T103510, start_date=20260707T103513, end_date=20260707T103513
+[2026-07-07T10:35:13.411+0000] {local_task_job_runner.py:243} INFO - Task exited with return code 0
+[2026-07-07T10:35:13.419+0000] {taskinstance.py:3503} INFO - 0 downstream tasks scheduled from follow-on schedule check
+[2026-07-07T10:35:13.419+0000] {local_task_job_runner.py:222} INFO - ::endgroup::

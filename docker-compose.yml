@@ -1,0 +1,137 @@
+version: "3.8"
+
+x-airflow-common: &airflow-common
+  build:
+    context: .
+    dockerfile: docker/Dockerfile.airflow
+  environment:
+    AIRFLOW__CORE__EXECUTOR: LocalExecutor
+    AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@postgres_airflow:5432/airflow
+    AIRFLOW__CORE__LOAD_EXAMPLES: "false"
+    AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION: "false"
+    AIRFLOW__WEBSERVER__EXPOSE_CONFIG: "true"
+    PYTHONPATH: /opt/airflow
+    MINIO_ENDPOINT: http://minio:9000
+    MINIO_ACCESS_KEY: minioadmin
+    MINIO_SECRET_KEY: minioadmin
+    GOLD_DB_HOST: postgres_gold
+    GOLD_DB_PORT: 5432
+    GOLD_DB_NAME: gold
+    GOLD_DB_USER: gold_user
+    GOLD_DB_PASSWORD: gold_password
+  volumes:
+    - ./dags:/opt/airflow/dags
+    - ./scripts:/opt/airflow/scripts
+    - ./logs:/opt/airflow/logs
+    - ./sql:/opt/airflow/sql
+  depends_on:
+    postgres_airflow:
+      condition: service_healthy
+    minio:
+      condition: service_healthy
+    postgres_gold:
+      condition: service_healthy
+
+services:
+
+  # --- Metadata DB dédiée à Airflow (LocalExecutor requiert Postgres, pas SQLite) ---
+  postgres_airflow:
+    image: postgres:15
+    environment:
+      POSTGRES_USER: airflow
+      POSTGRES_PASSWORD: airflow
+      POSTGRES_DB: airflow
+    volumes:
+      - pg_airflow_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "airflow"]
+      interval: 5s
+      retries: 5
+    ports:
+      - "5433:5432"
+
+  # --- Postgres dédié à la zone Gold (schéma en étoile) ---
+  postgres_gold:
+    image: postgres:15
+    environment:
+      POSTGRES_USER: gold_user
+      POSTGRES_PASSWORD: gold_password
+      POSTGRES_DB: gold
+    volumes:
+      - pg_gold_data:/var/lib/postgresql/data
+      - ./sql:/docker-entrypoint-initdb.d
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "gold_user"]
+      interval: 5s
+      retries: 5
+    ports:
+      - "5434:5432"
+
+  # --- MinIO : stockage objet pour les zones bronze et silver ---
+  minio:
+    image: minio/minio:latest
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin
+    volumes:
+      - minio_data:/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 5s
+      retries: 5
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+
+  # --- Création des buckets bronze / silver au démarrage ---
+  minio_init:
+    image: minio/mc:latest
+    depends_on:
+      minio:
+        condition: service_healthy
+    entrypoint: >
+      /bin/sh -c "
+      mc alias set local http://minio:9000 minioadmin minioadmin &&
+      mc mb -p local/bronze &&
+      mc mb -p local/silver &&
+      mc mb -p local/silver-quarantine &&
+      exit 0
+      "
+
+  airflow-init:
+    <<: *airflow-common
+    entrypoint: >
+      /bin/bash -c "
+      airflow db migrate &&
+      airflow users create --username admin --password admin --firstname Admin --lastname User --role Admin --email admin@example.com
+      "
+
+  airflow-webserver:
+    <<: *airflow-common
+    command: webserver
+    ports:
+      - "8080:8080"
+    depends_on:
+      airflow-init:
+        condition: service_completed_successfully
+
+  airflow-scheduler:
+    <<: *airflow-common
+    command: scheduler
+    depends_on:
+      airflow-init:
+        condition: service_completed_successfully
+
+  metabase:
+    image: metabase/metabase:latest
+    ports:
+      - "3000:3000"
+    depends_on:
+      postgres_gold:
+        condition: service_healthy
+
+volumes:
+  pg_airflow_data:
+  pg_gold_data:
+  minio_data:
